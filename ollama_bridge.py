@@ -46,7 +46,7 @@ from dataclasses import dataclass, asdict
 # Configuration
 # =============================================================================
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 BUILD_DATE = "2026-01-10"
 
 # Default paths (in cli_bridge directory)
@@ -1975,13 +1975,26 @@ def generate_summary(
     stats = get_batch_stats(results_file)
 
     # Handle empty/missing stats
-    if not stats or "total" not in stats:
+    if not stats or "total_tasks" not in stats:
         if output_format == "json":
             return json.dumps({"error": "No results found", "file": str(results_file)}, indent=2)
         return f"No results found in {results_file}"
 
     if output_format == "json":
-        return json.dumps(stats, indent=2)
+        return json.dumps(stats, indent=2, default=str)
+
+    # Normalize keys for text/markdown output
+    stats["total"] = stats.get("total_tasks", 0)
+    stats["success"] = stats.get("successful", 0)
+    if stats.get("timing"):
+        # Convert string times to floats for formatting
+        timing = stats["timing"]
+        timing["total"] = float(timing.get("total_time", "0s").rstrip("s"))
+        timing["average"] = float(timing.get("avg_time", "0s").rstrip("s")) if timing.get("avg_time") != "N/A" else 0
+        timing["min"] = float(timing.get("min_time", "0s").rstrip("s")) if timing.get("min_time") != "N/A" else 0
+        timing["max"] = float(timing.get("max_time", "0s").rstrip("s")) if timing.get("max_time") != "N/A" else 0
+    if stats.get("tokens"):
+        stats["tokens"]["average"] = stats["tokens"].get("avg", 0)
 
     # Build text/markdown report
     lines = []
@@ -1998,7 +2011,7 @@ def generate_summary(
         lines.append(f"| Total Tasks | {stats['total']} |")
         lines.append(f"| Successful | {stats['success']} |")
         lines.append(f"| Failed | {stats['failed']} |")
-        lines.append(f"| Success Rate | {stats['success_rate']:.1%} |")
+        lines.append(f"| Success Rate | {stats['success_rate']} |")
         lines.append("")
 
         if stats.get("timing"):
@@ -2025,7 +2038,7 @@ def generate_summary(
             lines.append("## Failed Companies")
             lines.append("")
             for fc in stats["failed_companies"]:
-                lines.append(f"- **{fc['company_name']}**: {fc['error']}")
+                lines.append(f"- **{fc.get('company', fc.get('company_name', 'Unknown'))}**: {fc.get('error', 'Unknown')}")
             lines.append("")
 
     else:  # text format
@@ -2039,7 +2052,7 @@ def generate_summary(
         lines.append(f"  Total Tasks:    {stats['total']}")
         lines.append(f"  Successful:     {stats['success']}")
         lines.append(f"  Failed:         {stats['failed']}")
-        lines.append(f"  Success Rate:   {stats['success_rate']:.1%}")
+        lines.append(f"  Success Rate:   {stats['success_rate']}")
         lines.append("")
 
         if stats.get("timing"):
@@ -2062,7 +2075,7 @@ def generate_summary(
             lines.append("FAILED COMPANIES")
             lines.append("-" * 30)
             for fc in stats["failed_companies"]:
-                lines.append(f"  • {fc['company_name']}: {fc['error']}")
+                lines.append(f"  • {fc.get('company', fc.get('company_name', 'Unknown'))}: {fc.get('error', 'Unknown')}")
             lines.append("")
 
         lines.append("=" * 50)
@@ -2460,7 +2473,9 @@ Examples:
     if args.list_models:
         bridge = OllamaBridge(endpoint=args.endpoint)
         models = bridge.list_models()
-        if models:
+        if args.json:
+            print(json.dumps({"models": models, "count": len(models), "endpoint": args.endpoint}, indent=2))
+        elif models:
             print("Available Ollama models:")
             for m in models:
                 print(f"  - {m}")
@@ -2662,15 +2677,20 @@ Examples:
     # Handle filter results (standalone, without --tail)
     if args.filter and not args.tail:
         results = filter_results(results_file, status=args.filter)
-        print(f"Found {len(results)} {args.filter} result(s)")
-        for r in results:
-            company = r.get("company_name", r.get("task_id", "Unknown"))
-            print(f"  - {company}")
+        if args.json:
+            print(json.dumps({"filter": args.filter, "count": len(results), "results": results}, indent=2, default=str))
+        else:
+            print(f"Found {len(results)} {args.filter} result(s)")
+            for r in results:
+                company = r.get("company_name", r.get("task_id", "Unknown"))
+                print(f"  - {company}")
         return
 
     # Handle summary report
     if args.summary:
-        report = generate_summary(results_file, output_format=args.summary_format)
+        # --json flag overrides summary_format
+        fmt = "json" if args.json else args.summary_format
+        report = generate_summary(results_file, output_format=fmt)
         print(report)
         return
 

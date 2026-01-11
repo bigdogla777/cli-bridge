@@ -1016,6 +1016,9 @@ python3 lm_bridge.py --tail 5 --json
 python3 lm_bridge.py --count --json
 python3 lm_bridge.py --stats --json
 python3 lm_bridge.py --search "Stripe" --json
+python3 lm_bridge.py --filter success --json
+python3 lm_bridge.py --summary --json
+python3 lm_bridge.py --list-models --json
 
 # Filtering
 python3 lm_bridge.py --filter success       # Only successful
@@ -1039,4 +1042,4 @@ python3 lm_bridge.py --clear-cache
 
 **Maintained by**: Claude Code SuperClaude
 **Last Updated**: January 10, 2026
-**Version**: 1.4.0 - Added --list-models, --json output, --version, --cache-stats, --search, --sort, date filters
+**Version**: 1.5.0 - Extended --json to --filter, --summary, --list-models; full JSON support for all query commands
